@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Wrapped - Dashboard</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        yt: {
+                            bg: '#0F0F0F',
+                            card: '#1E1E1E',
+                            red: '#FF0000',
+                            text: '#FFFFFF',
+                            textMuted: '#AAAAAA',
+                            border: '#333333'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            background-color: #0F0F0F;
+            color: #FFFFFF;
+        }
+
+        .glass-panel {
+            background: #1E1E1E;
+            border: 1px solid #333;
+            border-radius: 1rem;
+        }
+
+        /* Heatmap Styles */
+        .heatmap-grid {
+            display: grid;
+            grid-template-rows: repeat(7, 1fr);
+            grid-auto-flow: column;
+            gap: 3px;
+            overflow-x: auto;
+            padding-bottom: 10px;
+        }
+
+        .heatmap-cell {
+            width: 12px;
+            height: 12px;
+            border-radius: 2px;
+            background-color: #2d2d2d;
+        }
+
+        .heatmap-cell[data-level="1"] {
+            background-color: #0e4429;
+        }
+
+        .heatmap-cell[data-level="2"] {
+            background-color: #006d32;
+        }
+
+        .heatmap-cell[data-level="3"] {
+            background-color: #26a641;
+        }
+
+        .heatmap-cell[data-level="4"] {
+            background-color: #39d353;
+        }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0F0F0F;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .tab-active {
+            border-bottom: 2px solid #FF0000;
+            color: #FFFFFF;
+        }
+
+        .tab-inactive {
+            color: #AAAAAA;
+            border-bottom: 2px solid transparent;
+        }
+
+        .tab-inactive:hover {
+            color: #FFFFFF;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen flex flex-col">
+
+    <!-- Top Bar / Upload Section -->
+    <header class="bg-yt-card border-b border-yt-border sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-yt-red rounded-full flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+                <div class="flex items-baseline gap-2">
+                    <h1 class="text-xl font-bold tracking-tight">YouTube Wrapped</h1>
+                    <span class="text-xs text-yt-textMuted font-mono">(beta)</span>
+                </div>
+            </div>
+
+            <!-- Upload Area (Compact) -->
+            <div id="upload-container" class="flex-1 w-full md:w-auto md:max-w-xl">
+                <div id="drop-zone"
+                    class="border border-dashed border-yt-border rounded-lg p-3 flex items-center justify-center gap-3 cursor-pointer hover:bg-white/5 transition-colors bg-yt-bg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-yt-textMuted" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    </svg>
+                    <span class="text-sm text-yt-textMuted" id="upload-text">Upload Google Takeout ZIP</span>
+                    <input type="file" id="file-input" class="hidden" accept=".zip">
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-7xl mx-auto w-full px-4 py-8 hidden" id="main-dashboard">
+
+        <!-- Tabs -->
+        <div class="flex border-b border-yt-border mb-8 overflow-x-auto">
+            <button onclick="switchTab('overview')" id="tab-overview"
+                class="px-6 py-3 font-medium text-sm transition-colors tab-active whitespace-nowrap">Overview</button>
+            <button onclick="switchTab('creators')" id="tab-creators"
+                class="px-6 py-3 font-medium text-sm transition-colors tab-inactive whitespace-nowrap">Creators</button>
+            <button onclick="switchTab('videos')" id="tab-videos"
+                class="px-6 py-3 font-medium text-sm transition-colors tab-inactive whitespace-nowrap">Top
+                Videos</button>
+        </div>
+
+        <!-- Overview Tab -->
+        <div id="view-overview" class="space-y-6">
+
+            <!-- Top Stats Cards -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="glass-panel p-6">
+                    <p class="text-yt-textMuted text-xs font-medium uppercase tracking-wider mb-1">Videos Watched</p>
+                    <h3 class="text-3xl font-bold" id="stat-total-videos">-</h3>
+                </div>
+                <div class="glass-panel p-6">
+                    <p class="text-yt-textMuted text-xs font-medium uppercase tracking-wider mb-1">Unique Creators</p>
+                    <h3 class="text-3xl font-bold" id="stat-total-creators">-</h3>
+                </div>
+                <div class="glass-panel p-6">
+                    <p class="text-yt-textMuted text-xs font-medium uppercase tracking-wider mb-1">Est. Watch Time</p>
+                    <h3 class="text-3xl font-bold" id="stat-watch-time">-</h3>
+                    <p class="text-xs text-yt-textMuted mt-1">Based on 5min avg</p>
+                </div>
+            </div>
+
+            <!-- Heatmap Section -->
+            <div class="glass-panel p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-semibold">Watch History Heatmap</h3>
+                    <span class="text-xs text-yt-textMuted">Last 365 Days</span>
+                </div>
+                <div id="heatmap-container" class="w-full overflow-x-auto">
+                    <div id="heatmap" class="heatmap-grid"></div>
+                </div>
+                <div class="flex justify-end items-center gap-2 mt-2 text-xs text-yt-textMuted">
+                    <span>Less</span>
+                    <div class="w-3 h-3 rounded-sm bg-[#2d2d2d]"></div>
+                    <div class="w-3 h-3 rounded-sm bg-[#0e4429]"></div>
+                    <div class="w-3 h-3 rounded-sm bg-[#006d32]"></div>
+                    <div class="w-3 h-3 rounded-sm bg-[#26a641]"></div>
+                    <div class="w-3 h-3 rounded-sm bg-[#39d353]"></div>
+                    <span>More</span>
+                </div>
+            </div>
+
+            <!-- Activity Charts -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Monthly Activity -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold mb-4">Most Active Months</h3>
+                    <div class="h-64 w-full">
+                        <canvas id="monthlyChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Weekly Activity -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold mb-4">Most Active Days</h3>
+                    <div class="h-64 w-full">
+                        <canvas id="weeklyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Stats & Top Creators -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Hourly Activity -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold mb-4">Most Active Time (24h)</h3>
+                    <div class="h-64 w-full">
+                        <canvas id="hourlyChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Top Creators Summary -->
+                <div class="glass-panel p-6">
+                    <h3 class="text-lg font-semibold mb-4">Top 5 Creators</h3>
+                    <div class="space-y-3" id="top-creators-summary">
+                        <!-- Injected JS -->
+                    </div>
+                    <button onclick="switchTab('creators')"
+                        class="w-full mt-4 py-2 text-sm text-yt-textMuted hover:text-white border border-yt-border rounded hover:bg-white/5 transition-colors">View
+                        All Creators</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Creators Tab -->
+        <div id="view-creators" class="hidden">
+            <div class="glass-panel overflow-hidden">
+                <div class="p-4 border-b border-yt-border bg-yt-card">
+                    <h3 class="text-lg font-semibold">Creator Leaderboard</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-black/20 text-yt-textMuted uppercase text-xs">
+                            <tr>
+                                <th class="px-6 py-3 font-medium">Rank</th>
+                                <th class="px-6 py-3 font-medium">Creator</th>
+                                <th class="px-6 py-3 font-medium text-right">Videos Watched</th>
+                                <th class="px-6 py-3 font-medium text-right">Est. Watch Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="creators-table-body" class="divide-y divide-yt-border">
+                            <!-- Injected JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Top Videos Tab -->
+        <div id="view-videos" class="hidden">
+            <div class="glass-panel overflow-hidden">
+                <div class="p-4 border-b border-yt-border bg-yt-card">
+                    <h3 class="text-lg font-semibold">Top Videos</h3>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-black/20 text-yt-textMuted uppercase text-xs">
+                            <tr>
+                                <th class="px-6 py-3 font-medium">Rank</th>
+                                <th class="px-6 py-3 font-medium">Video</th>
+                                <th class="px-6 py-3 font-medium text-right">Plays</th>
+                                <th class="px-6 py-3 font-medium text-right">Usually Played At</th>
+                                <th class="px-6 py-3 font-medium text-right">Total Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="videos-table-body" class="divide-y divide-yt-border">
+                            <!-- Injected JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay"
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex-col items-center justify-center">
+        <div class="w-12 h-12 border-4 border-yt-border border-t-yt-red rounded-full animate-spin mb-4"></div>
+        <p class="text-lg font-medium">Processing your history...</p>
+        <p class="text-sm text-yt-textMuted mt-2">This happens locally on your device.</p>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadText = document.getElementById('upload-text');
+        const mainDashboard = document.getElementById('main-dashboard');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        // --- State ---
+        let currentData = null;
+        let monthlyChartInstance = null;
+        let weeklyChartInstance = null;
+        let hourlyChartInstance = null;
+
+        // --- Event Listeners ---
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('bg-white/10', 'border-yt-red');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('bg-white/10', 'border-yt-red');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('bg-white/10', 'border-yt-red');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) handleFile(files[0]);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) handleFile(e.target.files[0]);
+        });
+
+        // --- Tab Logic ---
+        function switchTab(tabName) {
+            const views = ['overview', 'creators', 'videos'];
+            views.forEach(v => {
+                const el = document.getElementById(`view-${v}`);
+                const btn = document.getElementById(`tab-${v}`);
+                if (v === tabName) {
+                    el.classList.remove('hidden');
+                    btn.classList.add('tab-active');
+                    btn.classList.remove('tab-inactive');
+                } else {
+                    el.classList.add('hidden');
+                    btn.classList.remove('tab-active');
+                    btn.classList.add('tab-inactive');
+                }
+            });
+        }
+
+        // --- File Handling ---
+        async function handleFile(file) {
+            if (!file.name.endsWith('.zip')) {
+                alert('Please upload a .zip file');
+                return;
+            }
+
+            loadingOverlay.classList.remove('hidden');
+            loadingOverlay.classList.add('flex');
+            uploadText.textContent = file.name;
+
+            try {
+                const zip = new JSZip();
+                const contents = await zip.loadAsync(file);
+
+                // Find watch-history.json
+                const fileNames = Object.keys(contents.files);
+                const watchHistoryFile = fileNames.find(name => name.match(/watch-history\.json$/i));
+
+                if (!watchHistoryFile) {
+                    throw new Error('watch-history.json not found');
+                }
+
+                const text = await contents.files[watchHistoryFile].async('text');
+                const data = JSON.parse(text);
+
+                // Process
+                processData(data);
+
+            } catch (err) {
+                console.error(err);
+                alert('Error processing file: ' + err.message);
+                uploadText.textContent = 'Upload Google Takeout ZIP';
+            } finally {
+                loadingOverlay.classList.add('hidden');
+                loadingOverlay.classList.remove('flex');
+            }
+        }
+
+        function processData(rawData) {
+            // Filter valid entries
+            const watches = rawData.filter(item =>
+                item.title &&
+                item.title !== "Visited YouTube Music" &&
+                !item.title.startsWith("Watched a video that has been removed")
+            );
+
+            // 1. Basic Stats
+            const totalVideos = watches.length;
+            const totalMinutes = totalVideos * 5;
+            const hours = Math.floor(totalMinutes / 60);
+            const minutes = totalMinutes % 60;
+            const timeString = `${hours}h ${minutes}m`;
+
+            // 2. Creators
+            const creators = {};
+            watches.forEach(w => {
+                if (w.subtitles && w.subtitles.length > 0) {
+                    const name = w.subtitles[0].name;
+                    creators[name] = (creators[name] || 0) + 1;
+                }
+            });
+            const creatorList = Object.entries(creators)
+                .map(([name, count]) => {
+                    const mins = count * 5;
+                    const h = Math.floor(mins / 60);
+                    const m = mins % 60;
+                    return { name, count, timeStr: `${h}h ${m}m` };
+                })
+                .sort((a, b) => b.count - a.count);
+
+            const totalCreators = Object.keys(creators).length;
+
+            // 3. Videos (Top Videos)
+            const videos = {};
+            watches.forEach(w => {
+                const title = w.title.replace("Watched ", "");
+                if (!videos[title]) {
+                    videos[title] = { count: 0, hours: {}, videoId: null };
+                }
+                videos[title].count++;
+                if (w.time) {
+                    const h = new Date(w.time).getHours();
+                    videos[title].hours[h] = (videos[title].hours[h] || 0) + 1;
+                }
+                // Try to extract Video ID
+                if (!videos[title].videoId && w.titleUrl) {
+                    const match = w.titleUrl.match(/v=([^&]+)/);
+                    if (match && match[1]) {
+                        videos[title].videoId = match[1];
+                    }
+                }
+            });
+
+            const videoList = Object.entries(videos)
+                .map(([title, data]) => {
+                    // Find peak hour
+                    const peakHour = Object.entries(data.hours).sort((a, b) => b[1] - a[1])[0]?.[0] || 0;
+                    const mins = data.count * 5;
+                    const h = Math.floor(mins / 60);
+                    const m = mins % 60;
+                    return {
+                        title,
+                        count: data.count,
+                        peakHour: `${peakHour}:00`,
+                        timeStr: `${h}h ${m}m`,
+                        videoId: data.videoId
+                    };
+                })
+                .sort((a, b) => b.count - a.count);
+
+
+            // 4. Activity (Heatmap & Peaks)
+            const dateCounts = {};
+            const monthCounts = {};
+            const dayCounts = {};
+
+            // Arrays for Charts
+            const monthlyData = new Array(12).fill(0);
+            const weeklyData = new Array(7).fill(0); // 0=Sun, 1=Mon...
+            const hourlyData = new Array(24).fill(0); // 0-23
+
+            watches.forEach(w => {
+                if (!w.time) return;
+                const date = new Date(w.time);
+
+                // Heatmap key (YYYY-MM-DD)
+                const dateKey = date.toISOString().split('T')[0];
+                dateCounts[dateKey] = (dateCounts[dateKey] || 0) + 1;
+
+                // Month key (Month YYYY)
+                const monthKey = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+                monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+
+                // Day key (Monday)
+                const dayKey = date.toLocaleString('default', { weekday: 'long' });
+                dayCounts[dayKey] = (dayCounts[dayKey] || 0) + 1;
+
+                // Hour
+                const hour = date.getHours();
+                hourlyData[hour] += 1; // Count videos per hour
+
+                // Chart Data (Estimated Hours)
+                const estHours = 5 / 60; // 5 mins in hours
+                monthlyData[date.getMonth()] += estHours;
+                weeklyData[date.getDay()] += estHours;
+            });
+
+            // Find peaks
+            const topMonth = Object.entries(monthCounts).sort((a, b) => b[1] - a[1])[0] || ['-', 0];
+            const topDay = Object.entries(dayCounts).sort((a, b) => b[1] - a[1])[0] || ['-', 0];
+
+            // Render
+            renderOverview({
+                totalVideos,
+                totalCreators,
+                timeString,
+                dateCounts,
+                topMonth,
+                topDay,
+                topCreators: creatorList.slice(0, 5),
+                monthlyData,
+                weeklyData,
+                hourlyData
+            });
+
+            renderCreatorsTab(creatorList);
+            renderVideosTab(videoList);
+
+            mainDashboard.classList.remove('hidden');
+        }
+
+        function renderOverview(stats) {
+            document.getElementById('stat-total-videos').textContent = stats.totalVideos.toLocaleString();
+            document.getElementById('stat-total-creators').textContent = stats.totalCreators.toLocaleString();
+            document.getElementById('stat-watch-time').textContent = stats.timeString;
+
+            // Top Creators Summary
+            const summaryContainer = document.getElementById('top-creators-summary');
+            summaryContainer.innerHTML = stats.topCreators.map((c, i) => `
+                <div class="flex items-center justify-between p-3 rounded bg-white/5">
+                    <div class="flex items-center gap-3">
+                        <span class="text-yt-textMuted font-mono text-sm">#${i + 1}</span>
+                        <span class="font-medium truncate max-w-[150px]">${c.name}</span>
+                    </div>
+                    <span class="text-sm text-yt-textMuted">${c.count} vids</span>
+                </div>
+            `).join('');
+
+            // Heatmap
+            renderHeatmap(stats.dateCounts);
+
+            // Charts
+            renderCharts(stats.monthlyData, stats.weeklyData, stats.hourlyData);
+        }
+
+        function renderHeatmap(dateCounts) {
+            const container = document.getElementById('heatmap');
+            container.innerHTML = '';
+
+            // Generate last 365 days
+            const today = new Date();
+            const oneYearAgo = new Date();
+            oneYearAgo.setDate(today.getDate() - 365);
+
+            // Adjust start to be a Sunday for alignment
+            while (oneYearAgo.getDay() !== 0) {
+                oneYearAgo.setDate(oneYearAgo.getDate() - 1);
+            }
+
+            let currentDate = new Date(oneYearAgo);
+            const maxVal = Math.max(...Object.values(dateCounts));
+
+            while (currentDate <= today) {
+                const dateKey = currentDate.toISOString().split('T')[0];
+                const count = dateCounts[dateKey] || 0;
+
+                let level = 0;
+                if (count > 0) {
+                    const pct = count / maxVal;
+                    if (pct < 0.25) level = 1;
+                    else if (pct < 0.5) level = 2;
+                    else if (pct < 0.75) level = 3;
+                    else level = 4;
+                }
+
+                const cell = document.createElement('div');
+                cell.className = 'heatmap-cell';
+                cell.setAttribute('data-level', level);
+                cell.title = `${dateKey}: ${count} videos`;
+
+                container.appendChild(cell);
+
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+        }
+
+        function renderCharts(monthlyData, weeklyData, hourlyData) {
+            // Destroy existing charts if they exist
+            if (monthlyChartInstance) monthlyChartInstance.destroy();
+            if (weeklyChartInstance) weeklyChartInstance.destroy();
+            if (hourlyChartInstance) hourlyChartInstance.destroy();
+
+            // Monthly Chart
+            const ctxMonth = document.getElementById('monthlyChart').getContext('2d');
+            monthlyChartInstance = new Chart(ctxMonth, {
+                type: 'bar',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+                    datasets: [{
+                        label: 'Estimated Hours',
+                        data: monthlyData,
+                        backgroundColor: '#FF0000',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#333' },
+                            ticks: { color: '#888' },
+                            title: {
+                                display: true,
+                                text: 'Hours',
+                                color: '#888',
+                                font: { size: 12 }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+
+            // Weekly Chart
+            const ctxWeek = document.getElementById('weeklyChart').getContext('2d');
+            const reorderedWeeklyData = [
+                weeklyData[1], weeklyData[2], weeklyData[3], weeklyData[4], weeklyData[5], weeklyData[6], weeklyData[0]
+            ];
+
+            weeklyChartInstance = new Chart(ctxWeek, {
+                type: 'bar',
+                data: {
+                    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                    datasets: [{
+                        label: 'Estimated Hours',
+                        data: reorderedWeeklyData,
+                        backgroundColor: '#39d353',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#333' },
+                            ticks: { color: '#888' },
+                            title: {
+                                display: true,
+                                text: 'Hours',
+                                color: '#888',
+                                font: { size: 12 }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#888' }
+                        }
+                    }
+                }
+            });
+
+            // Hourly Chart (Bar - better for discrete time data)
+            const ctxHour = document.getElementById('hourlyChart').getContext('2d');
+            const hourLabels = Array.from({ length: 24 }, (_, i) => `${i.toString().padStart(2, '0')}:00`);
+
+            hourlyChartInstance = new Chart(ctxHour, {
+                type: 'bar',
+                data: {
+                    labels: hourLabels,
+                    datasets: [{
+                        label: 'Videos Watched',
+                        data: hourlyData,
+                        backgroundColor: '#FF0000',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#333' },
+                            ticks: {
+                                color: '#888',
+                                precision: 0
+                            },
+                            title: {
+                                display: true,
+                                text: 'Videos',
+                                color: '#888',
+                                font: { size: 12 }
+                            }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#888', maxRotation: 0, autoSkip: true, maxTicksLimit: 12 }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderCreatorsTab(list) {
+            const tbody = document.getElementById('creators-table-body');
+            tbody.innerHTML = list.map((c, i) => `
+                <tr class="hover:bg-white/5 transition-colors">
+                    <td class="px-6 py-4 text-yt-textMuted font-mono">#${i + 1}</td>
+                    <td class="px-6 py-4 font-medium">${c.name}</td>
+                    <td class="px-6 py-4 text-right">${c.count.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-right text-yt-textMuted">${c.timeStr}</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderVideosTab(list) {
+            const tbody = document.getElementById('videos-table-body');
+            tbody.innerHTML = list.slice(0, 100).map((v, i) => {
+                const thumbUrl = v.videoId
+                    ? `https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`
+                    : 'https://via.placeholder.com/120x68/000000/FFFFFF?text=No+Img';
+
+                return `
+                <tr class="hover:bg-white/5 transition-colors">
+                    <td class="px-6 py-4 text-yt-textMuted font-mono">#${i + 1}</td>
+                    <td class="px-6 py-4">
+                        <div class="flex items-center gap-4">
+                            <img src="${thumbUrl}" class="w-24 h-14 object-cover rounded bg-black/50" loading="lazy" alt="Thumbnail">
+                            <span class="font-medium truncate max-w-[300px]" title="${v.title}">${v.title}</span>
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 text-right">${v.count.toLocaleString()}</td>
+                    <td class="px-6 py-4 text-right text-yt-textMuted">${v.peakHour}</td>
+                    <td class="px-6 py-4 text-right text-yt-textMuted">${v.timeStr}</td>
+                </tr>
+            `}).join('');
+        }
+    </script>
+</body>
+
+</html>

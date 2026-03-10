@@ -141,7 +141,7 @@ Inspired by **Spotify Wrapped's** engaging year-in-review experience.
 
 <div align="center">
 
-**Made with ❤️ for YouTube data nerds**
+**Made with ⚡ for YouTube data nerds**
 
 [View Demo](https://rahullvahull.github.io/youtube_insight) • [Report Bug](https://github.com/rahullvahull/youtube_insight/issues) • [Request Feature](https://github.com/rahullvahull/youtube_insight/issues)
 
